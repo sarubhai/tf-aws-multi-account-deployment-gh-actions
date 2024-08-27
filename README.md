@@ -34,4 +34,5 @@ Modify the main.tf, or Add other terraform configuration files to suit your spec
 
 GitHub Actions Workflow: The included workflow (.github/workflows/terraform.yml) will automatically trigger Terraform commands based on the GitHub Actions push event. Customize the workflow if necessary.
 
-Happy Terraforming! 🌍
+
+You can refer this [article](https://appdev24.com/pages/60/automating-aws-infrastructure-provisioning-with-terraform-and-github-actions) for complete understanding
