@@ -1,0 +1,75 @@
+name: Terraform-Destroy-Adhoc
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "environment for manual destroy"
+        required: true
+
+env:
+  AWS_REGION: "eu-central-1"
+  # Conditional Envs
+  ACT_IS_STG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stg' }}
+  ACT_IS_PRO: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'pro' }}
+
+  AWS_ACCOUNT_ID_ADM: '${{ secrets.AWS_ACCOUNT_ID_ADM }}'
+  
+  AWS_ACCOUNT_ID_STG: '${{ secrets.AWS_ACCOUNT_ID_STG }}'
+  TFSTATE_BUCKET_STG: '${{ secrets.TFSTATE_BUCKET_STG }}'
+  AWS_DYNAMODB_TABLE_STG: '${{ secrets.AWS_DYNAMODB_TABLE_STG }}'
+
+  AWS_ACCOUNT_ID_PRO: '${{ secrets.AWS_ACCOUNT_ID_PRO }}'
+  TFSTATE_BUCKET_PRO: '${{ secrets.TFSTATE_BUCKET_PRO }}'
+  AWS_DYNAMODB_TABLE_PRO: '${{ secrets.AWS_DYNAMODB_TABLE_PRO }}'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform-automation-job:
+    runs-on: [ubuntu-latest]
+    steps:
+      
+      - name: Setup Stage Provider & Backend credentials
+        if: env.ACT_IS_STG == 'true'
+        run: |
+            echo "Setup Stage Provider & Backend credentials"
+            echo "TF_VAR_environment=stg" >> $GITHUB_ENV
+            echo "TF_VAR_aws_env_account=${AWS_ACCOUNT_ID_STG}" >> $GITHUB_ENV
+            echo "TFSTATE_BUCKET=${TFSTATE_BUCKET_STG}" >> $GITHUB_ENV
+            echo "AWS_DYNAMODB_TABLE=${AWS_DYNAMODB_TABLE_STG}" >> $GITHUB_ENV
+
+      - name: Setup Production Provider & Backend credentials
+        if: env.ACT_IS_PRO == 'true'
+        run: |
+            echo "Setup Production Provider & Backend credentials"
+            echo "TF_VAR_environment=pro" >> $GITHUB_ENV
+            echo "TF_VAR_aws_env_account=${AWS_ACCOUNT_ID_PRO}" >> $GITHUB_ENV
+            echo "TFSTATE_BUCKET=${TFSTATE_BUCKET_PRO}" >> $GITHUB_ENV
+            echo "AWS_DYNAMODB_TABLE=${AWS_DYNAMODB_TABLE_PRO}" >> $GITHUB_ENV
+
+      - name: Checkout local repo
+        uses: actions/checkout@v3
+    
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID_ADM }}:role/terraform-admin-role
+          aws-region: ${{ env.AWS_REGION }}
+          disable-retry: "true"
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform Init
+        run: terraform init -backend-config="bucket=${TFSTATE_BUCKET}" -backend-config="dynamodb_table=${AWS_DYNAMODB_TABLE}"
+
+      - name: Terraform Plan
+        run: terraform plan -no-color
+        continue-on-error: false
+
+      - name: Terraform Destroy
+        run: terraform destroy --auto-approve
